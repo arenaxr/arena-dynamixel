@@ -69,6 +69,7 @@ DXL_MINIMUM_POSITION_VALUE  = 0           # Dynamixel will rotate between this v
 DXL_MAXIMUM_POSITION_VALUE  = 1023            # and this value (note that the Dynamixel would not move when the position value is out of movable range. Check e-manual about the range of the Dynamixel you use.)
 DXL_MOVING_STATUS_THRESHOLD = 20                # Dynamixel moving status threshold
 FULL_REVOLUTION             = 360
+HALF_REVOLUTION             = 180
 
 APPROX_CENTER_POS           = 518
 PAN_UPPER_BOUND             = 1020
@@ -205,6 +206,7 @@ class Dynamixel_Servo:
             print("%s" % self.packetHandler.getRxPacketError(dxl_error))
 
         prev_angle = int(float(dxl_present_position % DXL_MAXIMUM_POSITION_VALUE) / float(DXL_MAXIMUM_POSITION_VALUE) * FULL_REVOLUTION) 
+        prev_big_angle = int(float(dxl_present_position) / float(DXL_MAXIMUM_POSITION_VALUE) * FULL_REVOLUTION)
         displacement = (angle-prev_angle)
         
         if dxl_present_position == PAN_UPPER_BOUND and not (displacement < 0):
@@ -222,7 +224,14 @@ class Dynamixel_Servo:
 
     def tilt_To_Angle(self, angle):
         dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read2ByteTxRx(self.portHandler, DXL_TILT_ID, ADDR_PRESENT_POSITION)
-
+        
+        #print("angle before " + str(angle))
+        if not (-60 < angle < 55): 
+            #print("Hop out at the ")
+            return
+        
+        angle += HALF_REVOLUTION
+        #print("angle after " + str(angle))
        
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
@@ -230,10 +239,11 @@ class Dynamixel_Servo:
             print("%s" % self.packetHandler.getRxPacketError(dxl_error))
 
         prev_angle = int(float(dxl_present_position % DXL_MAXIMUM_POSITION_VALUE) / float(DXL_MAXIMUM_POSITION_VALUE) * FULL_REVOLUTION) 
+        #print("prev_angle " + str(prev_angle))
         displacement = (angle-prev_angle)
 
-        if abs(displacement) > JUMP_THRESHOLD :
-            return
+        # if abs(displacement) > JUMP_THRESHOLD :
+        #     return
 
         #print(displacement)
         self.rotate_Degrees(int(displacement), DXL_TILT_ID)
