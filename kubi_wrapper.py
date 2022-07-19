@@ -29,6 +29,7 @@
 #
 
 import os
+import time
 
 if os.name == 'nt':
     import msvcrt
@@ -79,6 +80,7 @@ TILT_UPPER_BOUND            = 660
 TILT_LOWER_BOUND            = 390
 
 JUMP_THRESHOLD              = 50
+INIT_POS                    = 525
 
 class Dynamixel_Servo:
     def __init__(self, port):
@@ -87,6 +89,7 @@ class Dynamixel_Servo:
         self.packetHandler = PacketHandler(PROTOCOL_VERSION)
         self.dxl_goal_position_pan = APPROX_CENTER_POS
         self.dxl_goal_position_tilt = APPROX_CENTER_POS
+        self.pos = [INIT_POS, INIT_POS]
     
     def connect_Dynamixel(self):
         if self.portHandler.openPort():
@@ -106,8 +109,6 @@ class Dynamixel_Servo:
             print("Press any key to terminate...")
             getch()
             quit()
-
-        
 
         # Enable Dynamixel Torque
         dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, DXL_PAN_ID, ADDR_TORQUE_ENABLE, TORQUE_ENABLE)
@@ -135,7 +136,7 @@ class Dynamixel_Servo:
             print("%s" % self.packetHandler.getRxPacketError(dxl_error))
         
         self.dxl_goal_position_pan = dxl_present_position_pan
-
+        self.pos[0] = dxl_present_position_pan
 
         dxl_present_position_tilt, dxl_comm_result, dxl_error = self.packetHandler.read2ByteTxRx(self.portHandler, DXL_TILT_ID, ADDR_PRESENT_POSITION)
         if dxl_comm_result != COMM_SUCCESS:
@@ -144,7 +145,7 @@ class Dynamixel_Servo:
             print("%s" % self.packetHandler.getRxPacketError(dxl_error))
         
         self.dxl_goal_position_tilt = dxl_present_position_tilt
-
+        self.pos[1] = dxl_present_position_tilt
        
         print("Dynamixel Intialized")
         #print(self.dxl_goal_position)
@@ -152,99 +153,57 @@ class Dynamixel_Servo:
 
 
     def __rotate_Motor(self, id):
-        # print("Press any key to continue! (or press ESC to quit!)")
-        # if getch() == chr(0x1b):
-        #     quit()
-
-        # Write goal position
-        if id == DXL_PAN_ID:
-            dxl_comm_result, dxl_error = self.packetHandler.write2ByteTxRx(self.portHandler, id, ADDR_GOAL_POSITION, self.dxl_goal_position_pan)
+        jmp_incr = 2
+        
+        if id == DXL_PAN_ID :
+            curr_pos = self.pos[0]
+            displacement = self.dxl_goal_position_pan - curr_pos
         else:
-            dxl_comm_result, dxl_error = self.packetHandler.write2ByteTxRx(self.portHandler, id, ADDR_GOAL_POSITION, self.dxl_goal_position_tilt)
-     
+            curr_pos = self.pos[1]
+            displacement = self.dxl_goal_position_tilt - curr_pos
+
+        if displacement < 0:
+            jmp_incr = -2
+        else:
+            jmp_incr = 2
+
+        dxl_comm_result, dxl_error = self.packetHandler.write2ByteTxRx(self.portHandler, id, ADDR_GOAL_POSITION, curr_pos % 1023)
+
         if dxl_comm_result != COMM_SUCCESS:
             print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
         elif dxl_error != 0:
             print("in rotate motor %s" % self.packetHandler.getRxPacketError(dxl_error))
+      
+        curr_pos += jmp_incr 
 
-        while 1:
-            # Read present position
-            dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read2ByteTxRx(self.portHandler, id, ADDR_PRESENT_POSITION)
-            
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-    
-            #currAngle = ((dxl_present_position * FULL_REVOLUTION) // DXL_MAXIMUM_POSITION_VALUE) % FULL_REVOLUTION
-            #print("[ID:%03d] GoalAngle:%03d  PresAngle:%03d" % (DXL_ID, angle % FULL_REVOLUTION, currAngle))
-            #print("id: %d   pres_pos: %d  goal_pos_pan: %d    goal_pos_tilt = %d" % (id, dxl_present_position, self.dxl_goal_position_pan, self.dxl_goal_position_tilt))
-            if id == DXL_PAN_ID and not abs(self.dxl_goal_position_pan - (dxl_present_position) ) > DXL_MOVING_STATUS_THRESHOLD:
-                return
-            elif not abs(self.dxl_goal_position_tilt  - (dxl_present_position) ) > DXL_MOVING_STATUS_THRESHOLD:
-                return
-        
-            
-    def rotate_Degrees(self, degrees, id):
-        if id == DXL_PAN_ID:
-            self.dxl_goal_position_pan = (self.dxl_goal_position_pan + int(float(degrees) * float(DXL_MAXIMUM_POSITION_VALUE) / float(FULL_REVOLUTION)))
-            if not (PAN_UPPER_BOUND >= self.dxl_goal_position_pan >= PAN_LOWER_BOUND):
-                return
+        if id == DXL_PAN_ID :
+            self.pos[0] = curr_pos % 1023
         else:
-            self.dxl_goal_position_tilt = (self.dxl_goal_position_tilt + int(float(degrees) * float(DXL_MAXIMUM_POSITION_VALUE) / float(FULL_REVOLUTION)))
-            if not (TILT_UPPER_BOUND >= self.dxl_goal_position_tilt >= TILT_LOWER_BOUND):
-                return
-        #print(self.dxl_goal_position)
-        self.__rotate_Motor(id) 
+            self.pos[1] = curr_pos % 1023
+
 
     def pan_To_Angle(self, angle):
-        dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read2ByteTxRx(self.portHandler, DXL_PAN_ID, ADDR_PRESENT_POSITION)
-        
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-
-        prev_angle = int(float(dxl_present_position % DXL_MAXIMUM_POSITION_VALUE) / float(DXL_MAXIMUM_POSITION_VALUE) * FULL_REVOLUTION) 
-        prev_big_angle = int(float(dxl_present_position) / float(DXL_MAXIMUM_POSITION_VALUE) * FULL_REVOLUTION)
-        displacement = (angle-prev_angle)
-        
-        if dxl_present_position == PAN_UPPER_BOUND and not (displacement < 0):
-            return
-
-        if dxl_present_position == PAN_LOWER_BOUND and not (displacement > 0):
-            return
-
-        if abs(displacement) > JUMP_THRESHOLD:
-            return
-
-        #print(displacement)
-        self.rotate_Degrees(int(displacement), DXL_PAN_ID)
+        angle += HALF_REVOLUTION
+        self.dxl_goal_position_pan = (int(float(angle) * float(DXL_MAXIMUM_POSITION_VALUE) / float(FULL_REVOLUTION))) % DXL_MAXIMUM_POSITION_VALUE
+          
+        if PAN_UPPER_BOUND < self.dxl_goal_position_pan:
+            self.dxl_goal_position_pan = PAN_UPPER_BOUND
+        elif PAN_LOWER_BOUND > self.dxl_goal_position_pan:
+            self.dxl_goal_position_pan = PAN_LOWER_BOUND
+       # print(self.dxl_goal_position_pan)
+        self.__rotate_Motor(DXL_PAN_ID) 
     
 
     def tilt_To_Angle(self, angle):
-        dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read2ByteTxRx(self.portHandler, DXL_TILT_ID, ADDR_PRESENT_POSITION)
-        
-        #print("angle before " + str(angle))
-        if not (-60 < angle < 55): 
-            #print("Hop out at the ")
-            return
-        
         angle += HALF_REVOLUTION
-        #print("angle after " + str(angle))
-       
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+        self.dxl_goal_position_tilt = (int(float(angle) * float(DXL_MAXIMUM_POSITION_VALUE) / float(FULL_REVOLUTION))) % DXL_MAXIMUM_POSITION_VALUE
 
-        prev_angle = int(float(dxl_present_position % DXL_MAXIMUM_POSITION_VALUE) / float(DXL_MAXIMUM_POSITION_VALUE) * FULL_REVOLUTION) 
-        #print("prev_angle " + str(prev_angle))
-        displacement = (angle-prev_angle)
-
-        # if abs(displacement) > JUMP_THRESHOLD :
-        #     return
-
-        #print(displacement)
-        self.rotate_Degrees(int(displacement), DXL_TILT_ID)
+        if TILT_UPPER_BOUND < self.dxl_goal_position_tilt:
+            self.dxl_goal_position_tilt = TILT_UPPER_BOUND
+        elif TILT_LOWER_BOUND > self.dxl_goal_position_tilt:
+            self.dxl_goal_position_tilt = TILT_LOWER_BOUND
+                
+        #print(self.dxl_goal_position_tilt)
+        self.__rotate_Motor(DXL_TILT_ID) 
+        
         
