@@ -4,7 +4,6 @@ import random
 import scipy
 import math
 
-
 kubi_1 = Dynamixel_Servo('/dev/tty.usbserial-FT6RW6MQ')
 kubi_2 = Dynamixel_Servo('/dev/tty.usbserial-FT6RWE8K')
 
@@ -86,7 +85,6 @@ def cam_create(cam_state_id):
     new_cam = Object(**{"object_id": "fixed_cam", "camera":{"active": True}, "position": (0, 0, -0.53), "rotation": (0, 180, 0), "parent": cam_state_id })
 
     user_cam_dict[cam_state_id] = new_cam
-    print(user_cam_dict[cam_state_id])
 
     scene.add_object(new_cam)
 
@@ -121,17 +119,11 @@ def cam_motor_sync():
             rotation_x = euler_cords[1]
             rotation_y = euler_cords[0]
     
-            # if kubi_1.occupant != "" and kubi_1.occupant != cam_state.id:
-            #     continue
-            
-            # if kubi_1.occupant == "":
-            #     kubi_1.occupant = cam_state.id
-            
 
     if not user_entered:
         return
 
-    print(user_entered)
+  
     kubi_1.pan_To_Angle(rotation_y)
     kubi_1.tilt_To_Angle(rotation_x)
       
